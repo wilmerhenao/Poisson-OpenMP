@@ -58,18 +58,29 @@ double uzz_exact ( double x, double y, double z );
 int main( int argc, char *argv[]){
 	// This is wrong but I will just ignore and overwrite the arguments
     	int traxh = 0;
-	int i;
+	int i, trials;
+	int * test_sizes;
 	int myargs[3] = {10, 10, 10}; 
-    	const int test_sizes[] = {10, 20, 30, 40, 50
-		};
+
+	if (argc == 1){
+		// Assign five trials if nothing else is provided
+		trials = 5;
+		test_sizes = (int *) malloc(5 * sizeof(int));
+	    	for(i = 0; i < 5; ++i)
+			test_sizes[i] = (i+1) *10;
+	} else {
+		trials = argc-1;
+		test_sizes = (int *) malloc((argc-1) * sizeof(int));
+		for (i = 1; i < argc; ++i){
+			test_sizes[i-1] = atoi(argv[i]);
+		}
+	}
 	
-    	#define N_SIZES (sizeof(test_sizes)/ sizeof(int))
-    
-    	for (i = 0; i < N_SIZES; ++i){
+    	for (i = 0; i < trials; ++i){
 		myargs[0] = myargs[1] = myargs[2] = test_sizes[i]; //Create a cube with the same lengths of dx on all sides (just bec. it's easy)
        		traxh = no_timing(argc, myargs);
     	}
-	
+	free(test_sizes);
 	return(traxh);
 }
 
