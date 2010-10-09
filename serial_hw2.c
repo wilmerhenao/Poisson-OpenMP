@@ -24,7 +24,8 @@
 /* ----- local prototypes -------------------------------------------------- */
 
 int main ( int argc, char *argv[] );
-void get_prob_size(int *nx, int *ny, int *nz, int argc, char** argv);
+int no_timing(int argc, int argv[3]);
+void get_prob_size(int *nx, int *ny, int *nz, int argc, int* argv);
 void driver ( int nx, int ny, int nz, int it_max, double tol,
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval );
@@ -54,7 +55,25 @@ double uzz_exact ( double x, double y, double z );
 
 /* ------------------------------------------------------------------------- */
 
-int main ( int argc, char *argv[] )
+int main( int argc, char *argv[]){
+	// This is wrong but I will just ignore and overwrite the arguments
+    	int traxh = 0;
+	int i;
+	int myargs[3] = {10, 10, 10}; 
+    	const int test_sizes[] = {10, 20, 30, 40, 50
+		};
+	
+    	#define N_SIZES (sizeof(test_sizes)/ sizeof(int))
+    
+    	for (i = 0; i < N_SIZES; ++i){
+		myargs[0] = myargs[1] = myargs[2] = test_sizes[i]; //Create a cube with the same lengths of dx on all sides (just bec. it's easy)
+       		traxh = no_timing(argc, myargs);
+    	}
+	
+	return(traxh);
+}
+
+int no_timing ( int argc, int argv[3] )
 {
   
     int nx = -1;   /* number of grid points in x           */
@@ -95,7 +114,6 @@ void driver ( int nx, int ny, int nz, int it_max, double tol,
     double secs = -1.0;
     struct timespec start, finish;
 
-
     /* Allocate and initialize  */
     f = ( double * ) malloc ( nx * ny * nz * sizeof ( double ) );  
     u = ( double * ) malloc ( nx * ny * nz * sizeof ( double ) );
@@ -107,12 +125,11 @@ void driver ( int nx, int ny, int nz, int it_max, double tol,
         for ( i = 0; i < nx; i++ ) 
           U(i,j,k) = 0.0;  /* note use of array indexing macro */
 
-
-  /* set rhs, and exact bcs in u */
+    /* set rhs, and exact bcs in u */
     init_prob ( nx, ny, nz, f, u , xlo, ylo, zlo, xhi, yhi, zhi);
 
     /* Solve the Poisson equation  */
-    jacobi ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval  );
+    jacobi ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval );
 
     /* Determine the error  */
     calc_error ( nx, ny, nz, u, f, xlo, ylo, zlo, xhi, yhi, zhi );
@@ -178,7 +195,7 @@ void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it
                           ay * ( U_OLD(i,j-1,k) + U_OLD(i,j+1,k) ) +
                           az * ( U_OLD(i,j,k-1) + U_OLD(i,j,k+1) ) ) ) / d;
 
-                diff = ABS(unew-U_OLD(i,j,k));  
+                diff = ABS(unew-U_OLD(i,j,k));
                 //update_norm = update_norm + diff*diff;  /* using 2 norm */
 
                 if (diff > update_norm){ /* using max norm */
@@ -223,7 +240,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     dz = (zhi - zlo) / ( double ) ( nz - 1 );
 
     /* Set the boundary conditions. For this simple test use exact solution in bcs */
-    
+
     j = 0;   // low y bc
     y = ylo + j * dy;
 
@@ -231,7 +248,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
       z = zlo + k*dz;
       for ( i = 0; i < nx; i++ ) {
         x = xlo + i * dx;
-        U(i,j,k) = u_exact ( x, y, z );
+        U(i,j,k) = u_exact ( x, y, z );  // notese que cuando aca se habla de ijk, en realidad es una macro que asigna la posicion necesaria
       }
     }
 
@@ -239,7 +256,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     y = ylo + j * dy;
     
     for ( k = 0; k < nz; k++ ) {
-      z = zlo + k*dz;      
+      z = zlo + k*dz;
       for ( i = 0; i < nx; i++ ) {
         x = xlo + i * dx;
         U(i,j,k) = u_exact ( x, y, z );
@@ -270,7 +287,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
 
     k = 0; // low z
     z = zlo + k * dz;
-    
+
     for ( j = 0; j < ny; j++ ) {
       y = ylo + j * dy;
       for ( i = 0; i < nx; i++) {
@@ -289,8 +306,6 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
         U(i,j,k) = u_exact ( x, y, z );
       }
     }
-
-
 
     /* Set the right hand side  */
     for ( k = 0; k < nz; k++ ){
@@ -404,26 +419,13 @@ double uzz_exact ( double x, double y , double z)
 
 /* ------------------------------------------------------------------------- */
 
-void get_prob_size(int *nx, int *ny, int *nz, int argc, char** argv)
+void get_prob_size(int *nx, int *ny, int *nz, int argc, int* argv)
 {
-
-    if (4 == argc) {
         /* read problem size from the arguments */
-        *nx  = atoi(argv[1]);
-        *ny  = atoi(argv[2]);
-        *nz  = atoi(argv[3]);
-    } else {
-        /* input problem size for this experiment */
-        printf("Enter 3 integers for number of grid points in x y and z\n");
-        scanf("%d %d %d",nx,ny,nz);
-    }
-
-    if (0 >= *nx  || 0 >= *ny || 0 >= *nz ) {
-      printf(" problem with domain discretizations nx = %d n = %d nz = %d\n", *nx,*ny,*nz);
-        exit(-11);
-    } else {
+        *nx  = argv[0];
+        *ny  = argv[1];
+        *nz  = argv[2];
       printf("Discretizing with %d %d %d points in x y and z \n", *nx, *ny, *nz);
-    }
 
     return;
 }
