@@ -53,6 +53,8 @@ double uzz_exact ( double x, double y, double z );
 #define U(i,j,k)          u[INDEX3D(i,j,k)]
 #define U_OLD(i,j,k)      u_old[INDEX3D(i,j,k)]
 
+const int deftrials = 5;
+
 /* ------------------------------------------------------------------------- */
 
 int main( int argc, char *argv[]){
@@ -61,25 +63,33 @@ int main( int argc, char *argv[]){
 	int i, trials;
 	int * test_sizes;
 	int myargs[3] = {10, 10, 10}; 
-
+	struct timespec start, finish;
+	double secs = -1.0;
+	FILE *fp;
 	if (argc == 1){
 		// Assign five trials if nothing else is provided
-		trials = 5;
-		test_sizes = (int *) malloc(5 * sizeof(int));
-	    	for(i = 0; i < 5; ++i)
-			test_sizes[i] = (i+1) *10;
+		trials = deftrials;
+		test_sizes = (int *) malloc(trials * sizeof(int));
+	    	for(i = 0; i < trials; ++i)
+			test_sizes[i] = (i+1) *20;
 	} else {
+		// Or assign the number of trials provided as an argument
 		trials = argc-1;
 		test_sizes = (int *) malloc((argc-1) * sizeof(int));
 		for (i = 1; i < argc; ++i){
 			test_sizes[i-1] = atoi(argv[i]);
 		}
 	}
-	
+	if (fp = fopen("results.dat", "w"));
     	for (i = 0; i < trials; ++i){
 		myargs[0] = myargs[1] = myargs[2] = test_sizes[i]; //Create a cube with the same lengths of dx on all sides (just bec. it's easy)
+		get_time(&start); // start counting time
        		traxh = no_timing(argc, myargs);
+		get_time(&finish); // stop the clock
+		secs = timespec_diff(start, finish);
+		fprintf (fp, "%u\t%lg\n", myargs[0], secs); // print to the file
     	}
+	fclose(fp);
 	free(test_sizes);
 	return(traxh);
 }
