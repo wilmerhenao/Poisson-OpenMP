@@ -29,9 +29,10 @@ void get_prob_size(int *nx, int *ny, int *nz, int argc, int* argv);
 void driver ( int nx, int ny, int nz, int it_max, double tol,
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval );
-void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
+void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
               double xlo, double ylo, double zlo,
-              double xhi, double yhi, double zhi, int io_interval );
+              double xhi, double yhi, double zhi, int io_interval, char rb[] );
+
 void init_prob ( int nx, int ny, int nz, double f[], double u[],
                  double xlo, double ylo, double zlo,
                  double xhi, double yhi, double zhi );
@@ -42,8 +43,7 @@ double u_exact   ( double x, double y, double z );
 double uxx_exact ( double x, double y, double z );
 double uyy_exact ( double x, double y, double z );
 double uzz_exact ( double x, double y, double z );
-
-
+void rb_vector(char rb[], int nx, int ny, int nz);
 /* ----- local macros  -------------------------------------------------- */
 
 #define INDEX3D(i,j,k)    ((i)+(j)*nx + (k)*(nx)*(ny))  //NOTE: column major (fortran-style) ordering here
@@ -51,8 +51,8 @@ double uzz_exact ( double x, double y, double z );
 #define ABS(A)            ((A) >= 0) ? (A) : -(A)
 #define F(i,j,k)          f[INDEX3D(i,j,k)]
 #define U(i,j,k)          u[INDEX3D(i,j,k)]
+#define RB(i,j,k)      	  rb[INDEX3D(i,j,k)]
 #define U_OLD(i,j,k)      u_old[INDEX3D(i,j,k)]
-
 const int deftrials = 5;
 
 /* ------------------------------------------------------------------------- */
@@ -112,15 +112,13 @@ int no_timing ( int argc, int argv[3] )
     
     /* get number of grid points for this experiment */
     get_prob_size(&nx, &ny, &nz, argc, argv);
-  
+
     //wval1 = omp_get_wtime();
     
     driver ( nx, ny, nz, it_max, tol, xlo, ylo, zlo, xhi, yhi, zhi, io_interval );
 
     //wval2 = omp_get_wtime();
     //printf("omp walltime  = %15.7e\n",wval2-wval1);
-    
-    
     return 0;
 }
 
@@ -128,9 +126,9 @@ int no_timing ( int argc, int argv[3] )
 
 void driver ( int nx, int ny, int nz, int it_max, double tol,
               double xlo, double ylo, double zlo,
-              double xhi, double yhi, double zhi, int io_interval)
-{
+              double xhi, double yhi, double zhi, int io_interval){
     double *f, *u;
+    char * rb;
     int i,j,k;
     double secs = -1.0;
     struct timespec start, finish;
@@ -138,9 +136,9 @@ void driver ( int nx, int ny, int nz, int it_max, double tol,
     /* Allocate and initialize  */
     f = ( double * ) malloc ( nx * ny * nz * sizeof ( double ) );  
     u = ( double * ) malloc ( nx * ny * nz * sizeof ( double ) );
+    rb = ( char * ) malloc (nx * ny * nz * sizeof ( char ) );
 
-    get_time(&start);
-
+    get_time( &start );
     for ( k = 0; k < nz; k++ ) 
       for ( j = 0; j < ny; j++ ) 
         for ( i = 0; i < nx; i++ ) 
@@ -148,9 +146,10 @@ void driver ( int nx, int ny, int nz, int it_max, double tol,
 
     /* set rhs, and exact bcs in u */
     init_prob ( nx, ny, nz, f, u , xlo, ylo, zlo, xhi, yhi, zhi);
-
+    // rb has the red and black positions
+    rb_vector(rb, nx, ny, nz);
     /* Solve the Poisson equation  */
-    jacobi ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval );
+    gauss_seidel ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval, rb );
 
     /* Determine the error  */
     calc_error ( nx, ny, nz, u, f, xlo, ylo, zlo, xhi, yhi, zhi );
@@ -162,21 +161,47 @@ void driver ( int nx, int ny, int nz, int it_max, double tol,
 
     free ( u );
     free ( f );
-
+    free (rb);
     return;
 }
 
+void rb_vector(char rb[], int nx, int ny, int nz){
+    int i;
+    
+    //first the case when the base is odd | necesito que los dos sean pares o que los dos sean impares
+    if(0 == (nx+ny) % 1){
+	for(i = 0; i < (nx*ny*nz); ++i){
+	    if(i % 1){
+		rb[i] = 'r';
+	    } else {
+	   	rb[i] = 'b';
+	    }
+	}
+    } else {
+        int activate = 0;
+	for(i = 0; i < (nx*ny*nz); ++i){
+	    if((i + activate) % 1){
+		rb[i] = 'r';
+	    } else {
+	   	rb[i] = 'b';
+	    }
+	    if(0 == (i+1) % (nx * ny) )
+		++activate;
+	}
+	
+    //when it's not.  I require a special treatment
+	
+    }
+}
 
-/* ------------------------------------------------------------------------- */
-
-
-void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
+/************************************************************************************/
+void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
               double xlo, double ylo, double zlo,
-              double xhi, double yhi, double zhi, int io_interval)
+              double xhi, double yhi, double zhi, int io_interval, char rb [])
 {
 
     double ax, ay, az, d;
-    double dx, dy, dz;
+    double dx, dy, dz, rem;
     double update_norm, unew;
     int i, it, j, k, it_used = it_max;
     double *u_old, diff;
@@ -192,39 +217,52 @@ void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it
     az =   1.0 / (dz * dz);
     d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
 
-    u_old = ( double * ) malloc ( nx * ny * nz * sizeof ( double ) );
-
     for ( it = 1; it <= it_max; it++ ) {
         update_norm = 0.0;
 
-        /* Copy new solution into old.  */
-      for ( k = 0; k < nz; k++ ) {
-        for ( j = 0; j < ny; j++ ) {
-            for ( i = 0; i < nx; i++ ) {
-              U_OLD(i,j,k) = U(i,j,k);
-            }
-        }
-      }
-
-    /* Compute stencil, and update.  bcs already in u. only update interior of domain */
+     /* Compute stencil, and update.  bcs already in u. only update interior of domain */
       for ( k = 1; k < nz-1; k++ ) {
         for ( j = 1; j < ny-1; j++ ) {
             for ( i = 1; i < nx-1; i++ ) {
+		if('r' == RB(i,j,k)){
+			rem = U(i,j,k);
+                	U(i,j,k) = (F(i,j,k) -
+                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
+                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
+                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) / d;
 
-                unew = (F(i,j,k) -
-                        ( ax * ( U_OLD(i-1,j,k) + U_OLD(i+1,j,k) ) +
-                          ay * ( U_OLD(i,j-1,k) + U_OLD(i,j+1,k) ) +
-                          az * ( U_OLD(i,j,k-1) + U_OLD(i,j,k+1) ) ) ) / d;
+                	diff = ABS(U(i,j,k)-rem);
+                
+			//update_norm = update_norm + diff*diff;  /* using 2 norm */
 
-                diff = ABS(unew-U_OLD(i,j,k));
-                //update_norm = update_norm + diff*diff;  /* using 2 norm */
+                	if (diff > update_norm){ /* using max norm */
+                	    update_norm = diff;
+                	  }
 
-                if (diff > update_norm){ /* using max norm */
-                    update_norm = diff;
-                  }
+               }
+            } /* end for i */
+        } /* end for j */
+      } /* end for k */
 
-                U(i,j,k) = unew;
+      for ( k = 1; k < nz-1; k++ ) {
+        for ( j = 1; j < ny-1; j++ ) {
+            for ( i = 1; i < nx-1; i++ ) {
+		if('b' == RB(i,j,k)){
+			rem = U(i,j,k);
+                	U(i,j,k) = (F(i,j,k) -
+                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
+                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
+                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) / d;
 
+                	diff = ABS(U(i,j,k)-rem);
+                
+			//update_norm = update_norm + diff*diff;  /* using 2 norm */
+
+                	if (diff > update_norm){ /* using max norm */
+                	    update_norm = diff;
+                	  }
+
+               }
             } /* end for i */
         } /* end for j */
       } /* end for k */
@@ -241,8 +279,6 @@ void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it
 
 
     printf ( " Final iteration  %5d   norm update %14.6e\n", it_used, update_norm );
-
-    free ( u_old );
 
     return;
 }
@@ -263,7 +299,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     /* Set the boundary conditions. For this simple test use exact solution in bcs */
 
     j = 0;   // low y bc
-    y = ylo + j * dy;
+    y = ylo;
 
     for ( k = 0; k < nz; k++ ) {
       z = zlo + k*dz;
@@ -274,7 +310,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     }
 
     j = ny - 1;  // hi y
-    y = ylo + j * dy;
+    y = yhi;
     
     for ( k = 0; k < nz; k++ ) {
       z = zlo + k*dz;
@@ -285,7 +321,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     }
 
     i = 0;  // low x
-    x = xlo + i * dx;
+    x = xlo;
 
     for ( k = 0; k < nz; k++ ) {
       z = zlo + k*dx;
@@ -296,7 +332,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     }
 
     i = nx - 1; // hi x
-    x = xlo + i * dx;
+    x = xhi;
 
     for ( k = 0; k < nz; k++ ) {
       z = zlo + k*dx;    
@@ -307,7 +343,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     }
 
     k = 0; // low z
-    z = zlo + k * dz;
+    z = zlo;
 
     for ( j = 0; j < ny; j++ ) {
       y = ylo + j * dy;
@@ -318,7 +354,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
     }
 
     k = nz - 1; // hi z
-    z = zlo + k * dz;
+    z = zhi;
     
     for ( j = 0; j < ny; j++ ) {
       y = ylo + j * dy;
@@ -340,7 +376,7 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
       }
     }
 
-    return ;
+    return;
 }
 
 /* ------------------------------------------------------------------------- */
