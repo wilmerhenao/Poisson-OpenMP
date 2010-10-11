@@ -250,10 +250,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * ax * U(i,j,k) ) / d;
 
-                diff = ABS(U(i,j,k)-rem);
-                	/*if (diff > update_norm){ using max norm 
-                	    update_norm = diff;
-                	  }*/
+                diff = U(i,j,k)-rem;
 		update_norm += diff*diff;  /* using 2 norm */
             } /* end for i */
         } /* end for j */
@@ -272,11 +269,8 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * ax * U(i,j,k) ) / d;
-               	diff = ABS(U(i,j,k)-rem);
-		update_norm += diff*diff;  /* using 2 norm */
-                	/*if (diff > update_norm){  using max norm 
-                	    update_norm = diff;
-                	  }*/
+               	diff = U(i,j,k)-rem;
+		update_norm += diff*diff;
             } /* end for i */
         } /* end for j */
       } /* end for k */
