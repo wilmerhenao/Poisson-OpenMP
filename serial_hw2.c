@@ -145,6 +145,9 @@ void driver ( int nx, int ny, int nz, long int it_max, double tol,
     rb = ( char * ) malloc (nx * ny * nz * sizeof ( char ) );
 
     get_time( &start );
+    omp_set_num_threads(6);
+    #pragma omp parallel for default(none)\
+    	shared(nx, ny, nz, u) private(i, j, k) 
     for ( k = 0; k < nz; k++ ) 
       for ( j = 0; j < ny; j++ ) 
         for ( i = 0; i < nx; i++ ) 
@@ -369,7 +372,10 @@ void init_prob ( int nx, int ny, int nz, double  f[], double u[],
         U(i,j,k) = u_exact ( x, y, z );
       }
     }
-
+    
+    omp_set_num_threads(7);
+    #pragma omp parallel for default(none)\
+    	shared(nx, ny, nz, dx, dy, dz, u, f, xlo, ylo, zlo) private(i, j, k, z, y, x) 
     /* Set the right hand side  */
     for ( k = 0; k < nz; k++ ){
       z = zlo + k * dz;
