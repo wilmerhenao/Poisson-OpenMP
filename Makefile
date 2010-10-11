@@ -7,7 +7,7 @@ CFLAGS = -O2
 #CFLAGS = -O2 -openmp 
 LFLAGS = -openmp 
 LIBS   = -lm -lrt
-INCLUDE = 
+INCLUDE = -openmp
 OBJS   = serial_hw2.o timing.o 
 
 .c.o:

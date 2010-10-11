@@ -17,6 +17,7 @@
 # include <stdlib.h>
 # include <stdio.h>
 # include <math.h>
+# include <omp.h>
 
 #include <time.h>
 #include "timing.h"
@@ -156,6 +157,7 @@ void driver ( int nx, int ny, int nz, long int it_max, double tol,
     /* Solve the Poisson equation  */
     //jacobi ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval );
     //gauss_seidel ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval, rb );
+
     SOR( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval , rb);
     /* Determine the error  */
     calc_error ( nx, ny, nz, u, f, xlo, ylo, zlo, xhi, yhi, zhi );
@@ -210,6 +212,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
     double dx, dy, dz, rem;
     double update_norm, unew;
     int i, it, j, k, it_used = it_max;
+    int istart;
     double *u_old, diff;
     double omega;
 
@@ -223,54 +226,58 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
     ay =   1.0 / (dy * dy);
     az =   1.0 / (dz * dz);
     d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
-    omega = 1;
+    omega = 1.0;
+
+    //set the number of threads
+    omp_set_num_threads(8);
 
     for ( it = 1; it <= it_max; it++ ) {
         update_norm = 0.0;
 
      /* Compute stencil, and update.  bcs already in u. only update interior of domain */
+    #pragma omp parallel for default(none)\
+    	shared(nx, ny, nz, omega, d, rb, u, f, ax, ay, az) private(i, j, k, rem, diff, istart) reduction(+:update_norm)
       for ( k = 1; k < nz-1; k++ ) {
         for ( j = 1; j < ny-1; j++ ) {
-            for ( i = 1; i < nx-1; i++ ) {
-		if('r' == RB(i,j,k)){
-			rem = U(i,j,k);
-                	U(i,j,k) = (omega * (F(i,j,k) -
-                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
-                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
-                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * U(i, j, k) ) / d;
 
-                	diff = ABS(U(i,j,k)-rem);
-                
-			//update_norm = update_norm + diff*diff;  /* using 2 norm */
+	    istart = 2;
+	    if('r' == RB(1,j,k)) // execute the reds first
+		istart = 1;
+            for ( i = istart; i < nx-1; i+=2 ) {
+		rem = U(i,j,k);
+                U(i,j,k) = (omega * (F(i,j,k) -
+                       	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
+                       	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
+                       	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * ax * U(i,j,k) ) / d;
 
-                	if (diff > update_norm){ /* using max norm */
+                diff = ABS(U(i,j,k)-rem);
+                	/*if (diff > update_norm){ using max norm 
                 	    update_norm = diff;
-                	  }
-
-               }
+                	  }*/
+		update_norm += diff*diff;  /* using 2 norm */
             } /* end for i */
         } /* end for j */
       } /* end for k */
 
       for ( k = 1; k < nz-1; k++ ) {
         for ( j = 1; j < ny-1; j++ ) {
-            for ( i = 1; i < nx-1; i++ ) {
-		if('b' == RB(i,j,k)){
-			rem = U(i,j,k);
-                	U(i,j,k) = (omega * (F(i,j,k) -
-                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
-                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
-                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * U(i, j, k) ) / d;
+	    istart = 2;
+	    if('b' == RB(1,j,k)) // Now execute the blacks
+		istart = 1;
+            for ( i = istart; i < nx-1; i+=2 ) {
+		diff = 0.0;
+		rem = U(i,j,k);
+               	U(i,j,k) = (omega * (F(i,j,k) -
+                       	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
+                       	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
+                       	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * ax * U(i,j,k) ) / d;
 
-                	diff = ABS(U(i,j,k)-rem);
-                
-			//update_norm = update_norm + diff*diff;  /* using 2 norm */
-
-                	if (diff > update_norm){ /* using max norm */
+               	diff = ABS(U(i,j,k)-rem);
+               
+		update_norm += diff*diff;  /* using 2 norm */
+                	/*if (diff > update_norm){  using max norm 
                 	    update_norm = diff;
-                	  }
-
-               }
+                	  }*/
             } /* end for i */
         } /* end for j */
       } /* end for k */
@@ -278,7 +285,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
         if (0 == it% io_interval) 
             printf ( " iteration  %5d   norm update %14.4e\n", it, update_norm );
 
-        if ( update_norm <= tol ) {
+        if ( sqrt(update_norm) <= tol ) {
           it_used = it;
           break;
         }
