@@ -26,13 +26,18 @@
 int main ( int argc, char *argv[] );
 int no_timing(int argc, int argv[3]);
 void get_prob_size(int *nx, int *ny, int *nz, int argc, int* argv);
-void driver ( int nx, int ny, int nz, int it_max, double tol,
+void driver ( int nx, int ny, int nz, long int it_max, double tol,
+              double xlo, double ylo, double zlo,
+              double xhi, double yhi, double zhi, int io_interval );
+void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval );
 void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval, char rb[] );
-
+void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
+              double xlo, double ylo, double zlo,
+              double xhi, double yhi, double zhi, int io_interval, char rb[] );
 void init_prob ( int nx, int ny, int nz, double f[], double u[],
                  double xlo, double ylo, double zlo,
                  double xhi, double yhi, double zhi );
@@ -102,7 +107,7 @@ int no_timing ( int argc, int argv[3] )
     int nz = -1;   /*                     and  z direction */
 
     double tol = 1.e-7;     /* convergence criteria */
-    int it_max = 1000;      /* max number of iterations */
+    long int it_max = 100000;      /* max number of iterations */
     int io_interval =  100; /* output status this often */
 
 
@@ -124,7 +129,7 @@ int no_timing ( int argc, int argv[3] )
 
 /* ------------------------------------------------------------------------- */
 
-void driver ( int nx, int ny, int nz, int it_max, double tol,
+void driver ( int nx, int ny, int nz, long int it_max, double tol,
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval){
     double *f, *u;
@@ -149,8 +154,9 @@ void driver ( int nx, int ny, int nz, int it_max, double tol,
     // rb has the red and black positions
     rb_vector(rb, nx, ny, nz);
     /* Solve the Poisson equation  */
-    gauss_seidel ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval, rb );
-
+    //jacobi ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval );
+    //gauss_seidel ( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval, rb );
+    SOR( nx, ny, nz, u, f, tol, it_max, xlo, ylo, zlo, xhi, yhi, zhi, io_interval , rb);
     /* Determine the error  */
     calc_error ( nx, ny, nz, u, f, xlo, ylo, zlo, xhi, yhi, zhi );
 
@@ -195,7 +201,7 @@ void rb_vector(char rb[], int nx, int ny, int nz){
 }
 
 /************************************************************************************/
-void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
+void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval, char rb [])
 {
@@ -205,6 +211,7 @@ void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, 
     double update_norm, unew;
     int i, it, j, k, it_used = it_max;
     double *u_old, diff;
+    double omega;
 
     /* Initialize the coefficients.  */
 
@@ -216,6 +223,7 @@ void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, 
     ay =   1.0 / (dy * dy);
     az =   1.0 / (dz * dz);
     d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
+    omega = 1;
 
     for ( it = 1; it <= it_max; it++ ) {
         update_norm = 0.0;
@@ -226,10 +234,10 @@ void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, 
             for ( i = 1; i < nx-1; i++ ) {
 		if('r' == RB(i,j,k)){
 			rem = U(i,j,k);
-                	U(i,j,k) = (F(i,j,k) -
+                	U(i,j,k) = (omega * (F(i,j,k) -
                         	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
                         	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
-                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) / d;
+                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * U(i, j, k) ) / d;
 
                 	diff = ABS(U(i,j,k)-rem);
                 
@@ -249,10 +257,10 @@ void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, 
             for ( i = 1; i < nx-1; i++ ) {
 		if('b' == RB(i,j,k)){
 			rem = U(i,j,k);
-                	U(i,j,k) = (F(i,j,k) -
+                	U(i,j,k) = (omega * (F(i,j,k) -
                         	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
                         	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
-                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) / d;
+                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * U(i, j, k) ) / d;
 
                 	diff = ABS(U(i,j,k)-rem);
                 
@@ -276,8 +284,6 @@ void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, 
         }
 
     } /* end for it iterations */
-
-
     printf ( " Final iteration  %5d   norm update %14.6e\n", it_used, update_norm );
 
     return;
@@ -487,6 +493,170 @@ void get_prob_size(int *nx, int *ny, int *nz, int argc, int* argv)
     return;
 }
 
+void jacobi ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
+              double xlo, double ylo, double zlo,
+              double xhi, double yhi, double zhi, int io_interval)
+{
+
+    double ax, ay, az, d;
+    double dx, dy, dz;
+    double update_norm, unew;
+    int i, it, j, k, it_used = it_max;
+    double *u_old, diff;
+
+    /* Initialize the coefficients.  */
+
+    dx =  (xhi - xlo) / ( double ) ( nx - 1 );
+    dy =  (yhi - ylo) / ( double ) ( ny - 1 );
+    dz =  (zhi - zlo) / ( double ) ( nz - 1 );
+
+    ax =   1.0 / (dx * dx);
+    ay =   1.0 / (dy * dy);
+    az =   1.0 / (dz * dz);
+    d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
+
+    u_old = ( double * ) malloc ( nx * ny * nz * sizeof ( double ) );
+
+    for ( it = 1; it <= it_max; it++ ) {
+        update_norm = 0.0;
+
+        /* Copy new solution into old.  */
+      for ( k = 0; k < nz; k++ ) {
+        for ( j = 0; j < ny; j++ ) {
+            for ( i = 0; i < nx; i++ ) {
+              U_OLD(i,j,k) = U(i,j,k);
+            }
+        }
+      }
+
+    /* Compute stencil, and update.  bcs already in u. only update interior of domain */
+      for ( k = 1; k < nz-1; k++ ) {
+        for ( j = 1; j < ny-1; j++ ) {
+            for ( i = 1; i < nx-1; i++ ) {
+
+                unew = (F(i,j,k) -
+                        ( ax * ( U_OLD(i-1,j,k) + U_OLD(i+1,j,k) ) +
+                          ay * ( U_OLD(i,j-1,k) + U_OLD(i,j+1,k) ) +
+                          az * ( U_OLD(i,j,k-1) + U_OLD(i,j,k+1) ) ) ) / d;
+
+                diff = ABS(unew-U_OLD(i,j,k));
+                //update_norm = update_norm + diff*diff;  /* using 2 norm */
+
+                if (diff > update_norm){ /* using max norm */
+                    update_norm = diff;
+                  }
+
+                U(i,j,k) = unew;
+
+            } /* end for i */
+        } /* end for j */
+      } /* end for k */
+
+        if (0 == it% io_interval) 
+            printf ( " iteration  %5d   norm update %14.4e\n", it, update_norm );
+
+        if ( update_norm <= tol ) {
+          it_used = it;
+          break;
+        }
+
+    } /* end for it iterations */
+
+
+    printf ( " Final iteration  %5d   norm update %14.6e\n", it_used, update_norm );
+
+    free ( u_old );
+
+    return;
+}
+
+void gauss_seidel ( int nx, int ny, int nz, double u[], double f[], double tol, int it_max,
+              double xlo, double ylo, double zlo,
+              double xhi, double yhi, double zhi, int io_interval, char rb [])
+{
+
+    double ax, ay, az, d;
+    double dx, dy, dz, rem;
+    double update_norm, unew;
+    int i, it, j, k, it_used = it_max;
+    double *u_old, diff;
+    double omega;
+
+    /* Initialize the coefficients.  */
+
+    dx =  (xhi - xlo) / ( double ) ( nx - 1 );
+    dy =  (yhi - ylo) / ( double ) ( ny - 1 );
+    dz =  (zhi - zlo) / ( double ) ( nz - 1 );
+
+    ax =   1.0 / (dx * dx);
+    ay =   1.0 / (dy * dy);
+    az =   1.0 / (dz * dz);
+    d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
+    omega = 1;
+
+    for ( it = 1; it <= it_max; it++ ) {
+        update_norm = 0.0;
+
+     /* Compute stencil, and update.  bcs already in u. only update interior of domain */
+      for ( k = 1; k < nz-1; k++ ) {
+        for ( j = 1; j < ny-1; j++ ) {
+            for ( i = 1; i < nx-1; i++ ) {
+		if('r' == RB(i,j,k)){
+			rem = U(i,j,k);
+                	U(i,j,k) = (F(i,j,k) -
+                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
+                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
+                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) / d;
+
+                	diff = ABS(U(i,j,k)-rem);
+                
+			//update_norm = update_norm + diff*diff;  /* using 2 norm */
+
+                	if (diff > update_norm){ /* using max norm */
+                	    update_norm = diff;
+                	  }
+
+               }
+            } /* end for i */
+        } /* end for j */
+      } /* end for k */
+
+      for ( k = 1; k < nz-1; k++ ) {
+        for ( j = 1; j < ny-1; j++ ) {
+            for ( i = 1; i < nx-1; i++ ) {
+		if('b' == RB(i,j,k)){
+			rem = U(i,j,k);
+                	U(i,j,k) = (F(i,j,k) -
+                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
+                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
+                        	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) / d;
+
+                	diff = ABS(U(i,j,k)-rem);
+                
+			//update_norm = update_norm + diff*diff;  /* using 2 norm */
+
+                	if (diff > update_norm){ /* using max norm */
+                	    update_norm = diff;
+                	  }
+
+               }
+            } /* end for i */
+        } /* end for j */
+      } /* end for k */
+
+        if (0 == it% io_interval) 
+            printf ( " iteration  %5d   norm update %14.4e\n", it, update_norm );
+
+        if ( update_norm <= tol ) {
+          it_used = it;
+          break;
+        }
+
+    } /* end for it iterations */
+    printf ( " Final iteration  %5d   norm update %14.6e\n", it_used, update_norm );
+
+    return;
+}
 /* ------------------------------------------------------------------------- */
 
 #undef U_OLD
