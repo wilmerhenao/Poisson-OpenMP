@@ -217,7 +217,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
     int i, it, j, k, it_used = it_max;
     int istart;
     double *u_old, diff;
-    double omega;
+    double omega, pidp;
 
     /* Initialize the coefficients.  */
 
@@ -229,8 +229,11 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
     ay =   1.0 / (dy * dy);
     az =   1.0 / (dz * dz);
     d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
-    omega = 1.0;
-
+    pidp = 3.141592653589793238/((double) (nz) + 1.0 );
+    omega = 2.0 * (1 - sin(pidp))/(cos(pidp) * cos(pidp));
+    (omega >= 2) ? (omega = 1.9) : (omega = omega);
+    (omega < 1) ? (omega = 1.0) : (omega = omega);
+    //omega = 1.1;
     //set the number of threads
     omp_set_num_threads(7);
 
@@ -251,7 +254,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
                 U(i,j,k) = (omega * (F(i,j,k) -
                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
-                       	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * ax * U(i,j,k) ) / d;
+                       	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) )  ) / d - (omega - 1.0) * U(i,j,k);
 
                 diff = U(i,j,k)-rem;
 		update_norm += diff*diff;  /* using 2 norm */
@@ -271,7 +274,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
                	U(i,j,k) = (omega * (F(i,j,k) -
                        	( ax * ( U(i-1,j,k) + U(i+1,j,k) ) +
                        	  ay * ( U(i,j-1,k) + U(i,j+1,k) ) +
-                       	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) ) - (omega - 1.0) * ax * U(i,j,k) ) / d;
+                       	  az * ( U(i,j,k-1) + U(i,j,k+1) ) ) )  ) / d - (omega - 1.0) * U(i,j,k);
                	diff = U(i,j,k)-rem;
 		update_norm += diff*diff;
             } /* end for i */
@@ -287,7 +290,7 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
         }
 
     } /* end for it iterations */
-    printf ( " Final iteration  %5d   norm update %14.6e\n", it_used, update_norm );
+    printf ( " Final iteration  %5d   norm update %14.6e and using an omega of %14.6e\n", it_used, update_norm, omega );
 
     return;
 }
