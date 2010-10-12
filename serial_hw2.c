@@ -108,7 +108,7 @@ int no_timing ( int argc, int argv[3] )
     int nz = -1;   /*                     and  z direction */
 
     double tol = 1.e-7;     /* convergence criteria */
-    long int it_max = 100000;      /* max number of iterations */
+    long int it_max = 900000;      /* max number of iterations */
     int io_interval =  100; /* output status this often */
 
 
@@ -210,7 +210,6 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
               double xlo, double ylo, double zlo,
               double xhi, double yhi, double zhi, int io_interval, char rb [])
 {
-
     double ax, ay, az, d;
     double dx, dy, dz, rem;
     double update_norm, unew;
@@ -218,14 +217,13 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
     int istart;
     double *u_old, diff;
     double omega, pidp;
-
     /* Initialize the coefficients.  */
 
     dx =  (xhi - xlo) / ( double ) ( nx - 1 );
     dy =  (yhi - ylo) / ( double ) ( ny - 1 );
     dz =  (zhi - zlo) / ( double ) ( nz - 1 );
 
-    ax =   1.0 / (dx * dx);
+    ax =   1.00 / (dx * dx);
     ay =   1.0 / (dy * dy);
     az =   1.0 / (dz * dz);
     d  = - 2.0 / (dx * dx)  - 2.0 / (dy * dy) -2.0 / (dz * dz);
@@ -233,14 +231,13 @@ void SOR ( int nx, int ny, int nz, double u[], double f[], double tol, int it_ma
     omega = 2.0 * (1 - sin(pidp))/(cos(pidp) * cos(pidp));
     (omega >= 2) ? (omega = 1.9) : (omega = omega);
     (omega < 1) ? (omega = 1.0) : (omega = omega);
-    //omega = 1.1;
     //set the number of threads
-    omp_set_num_threads(7);
 
     for ( it = 1; it <= it_max; it++ ) {
-        update_norm = 0.0;
+        update_norm = 0.00;
 
      /* Compute stencil, and update.  bcs already in u. only update interior of domain */
+    omp_set_num_threads(7);
     #pragma omp parallel for default(none)\
     	shared(nx, ny, nz, omega, d, rb, u, f, ax, ay, az) private(i, j, k, rem, diff, istart) reduction(+:update_norm)
       for ( k = 1; k < nz-1; k++ ) {

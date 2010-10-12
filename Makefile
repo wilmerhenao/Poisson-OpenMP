@@ -3,7 +3,7 @@
 #
 CMD    = xserial
 CC     = icc
-CFLAGS = -O2 
+CFLAGS = -O2 -align -Zp8 -axP -unroll
 #CFLAGS = -O2 -openmp 
 LFLAGS = -openmp 
 LIBS   = -lm -lrt
